@@ -24,8 +24,8 @@ func GenerateStats(slidingWindow []logentry.LogEntry, patternCounts map[string]i
 	infoPercentage := float64(infoCount) / float64(total) * 100
 	debugPercentage := float64(debugCount) / float64(total) * 100
 
-	currentRate := CalculateRate(perSecondRates)  // Corrected: Exported function
-	peakRate := CalculatePeakRate(perSecondRates) // Corrected: Exported function
+	currentRate := CalculateRate(perSecondRates)
+	peakRate := CalculatePeakRate(perSecondRates)
 	errorRate := float64(errorCount) / float64(len(perSecondRates))
 
 	stats["entriesProcessed"] = total + skippedLogs
@@ -40,11 +40,13 @@ func GenerateStats(slidingWindow []logentry.LogEntry, patternCounts map[string]i
 	stats["debugCount"] = debugCount
 	stats["errorRate"] = errorRate
 	stats["skippedLogs"] = skippedLogs
+	stats["patternCounts"] = patternCounts
+	stats["patternWeights"] = patternWeights
 
 	return stats
 }
 
-func CalculateRate(perSecondRates []int) float64 { // Corrected: Exported function
+func CalculateRate(perSecondRates []int) float64 {
 	sum := 0
 	for _, rate := range perSecondRates {
 		sum += rate
@@ -52,7 +54,7 @@ func CalculateRate(perSecondRates []int) float64 { // Corrected: Exported functi
 	return float64(sum) / float64(len(perSecondRates))
 }
 
-func CalculatePeakRate(perSecondRates []int) float64 { // Corrected: Exported function
+func CalculatePeakRate(perSecondRates []int) float64 {
 	peak := 0.0
 	for _, rate := range perSecondRates {
 		peak = math.Max(peak, float64(rate))

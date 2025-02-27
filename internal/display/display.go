@@ -2,7 +2,7 @@ package display
 
 import (
 	"fmt"
-	"os"
+	"sort"
 	"time"
 )
 
@@ -16,46 +16,74 @@ func DisplayStats(statsChan <-chan map[string]interface{}, done chan bool) {
 			if !ok {
 				return
 			}
-			//fmt.Println(stats) // Debugging: Print stats
+			clearScreen()
 			displayReport(stats)
 		case <-ticker.C:
-			// If needed, display last stats again
-			//fmt.Println("Ticker tick")
+			// No action on ticker, display report only when stats are received
 		case <-done:
 			return
 		}
 	}
 }
 
+func clearScreen() {
+	fmt.Print("\033[H\033[2J")
+}
+
 func displayReport(stats map[string]interface{}) {
-	// Implement formatting and printing of the report
-	fmt.Printf("Log Analysis Report (Last Updated: %s)\n", time.Now().UTC().Format(time.RFC3339))
-	os.Stdout.Sync() // Flush the output
+	now := time.Now().UTC()
+	fmt.Printf("Log Analysis Report (Last Updated: %s)\n", now.Format("2006-01-02 15:04:05 UTC"))
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	os.Stdout.Sync()
 	fmt.Printf("Runtime Stats:\n")
-	os.Stdout.Sync()
 	fmt.Printf("• Entries Processed: %d\n", stats["entriesProcessed"])
-	os.Stdout.Sync()
-	fmt.Printf("• Current Rate: %.2f entries/sec (Peak: %.2f entries/sec)\n", stats["currentRate"], stats["peakRate"])
-	os.Stdout.Sync()
+	fmt.Printf("• Current Rate: %.0f entries/sec (Peak: %.0f entries/sec)\n", stats["currentRate"], stats["peakRate"])
 	fmt.Printf("• Adaptive Window: %d sec\n", stats["windowSize"])
-	os.Stdout.Sync()
+
 	fmt.Println("\nPattern Analysis:")
-	os.Stdout.Sync()
-	fmt.Printf("• ERROR: %.2f%% (%d entries)\n", stats["errorPercentage"], stats["errorCount"])
-	os.Stdout.Sync()
-	fmt.Printf("• INFO: %.2f%% (%d entries)\n", stats["infoPercentage"], stats["infoCount"])
-	os.Stdout.Sync()
-	fmt.Printf("• DEBUG: %.2f%% (%d entries)\n", stats["debugPercentage"], stats["debugCount"])
-	os.Stdout.Sync()
+	fmt.Printf("• ERROR: %.0f%% (%d entries)\n", stats["errorPercentage"], stats["errorCount"])
+	fmt.Printf("• INFO: %.0f%% (%d entries)\n", stats["infoPercentage"], stats["infoCount"])
+	fmt.Printf("• DEBUG: %.0f%% (%d entries)\n", stats["debugPercentage"], stats["debugCount"])
+
 	fmt.Println("\nDynamic Insights:")
-	os.Stdout.Sync()
-	fmt.Printf("• Error Rate: %.2f errors/sec\n", stats["errorRate"])
-	os.Stdout.Sync()
-	// Add other dynamic insights and self-evolving alerts
+	fmt.Printf("• Error Rate: %.1f errors/sec\n", stats["errorRate"])
+
+	// Emerging Pattern (Placeholder)
+	fmt.Println("• Emerging Pattern: (Placeholder)")
+
+	// Top Errors (Placeholder)
+	fmt.Println("• Top Errors:")
+	topErrors := getTopErrors(stats["patternCounts"].(map[string]int), stats["patternWeights"].(map[string]float64), 3)
+	for i, errorMsg := range topErrors {
+		fmt.Printf("  %d. %s\n", i+1, errorMsg)
+	}
+
+	fmt.Println("\nSelf-Evolving Alerts:")
+	// Self-Evolving Alerts (Placeholder)
+	fmt.Println("  (Placeholder)")
+
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	os.Stdout.Sync()
 	fmt.Println("Press Ctrl+C to exit")
-	os.Stdout.Sync()
+}
+
+func getTopErrors(patternCounts map[string]int, patternWeights map[string]float64, limit int) []string {
+	type errorEntry struct {
+		Message string
+		Weight  float64
+	}
+
+	var errors []errorEntry
+	for msg, count := range patternCounts {
+		errors = append(errors, errorEntry{Message: msg, Weight: float64(count) * patternWeights[msg]})
+	}
+
+	sort.Slice(errors, func(i, j int) bool {
+		return errors[i].Weight > errors[j].Weight
+	})
+
+	var topErrors []string
+	for i := 0; i < len(errors) && i < limit; i++ {
+		topErrors = append(topErrors, errors[i].Message)
+	}
+
+	return topErrors
 }

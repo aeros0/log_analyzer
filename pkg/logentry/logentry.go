@@ -13,11 +13,8 @@ type LogEntry struct {
 }
 
 func ParseLogLine(line string) (LogEntry, error) {
-	//fmt.Println("lines:", line)
-	re := regexp.MustCompile(`\[(.*?)\]\s+(.*?)\s+-\s+IP:.*?\s+(Error\s+500\s+-\s+.*)?`) // Corrected regex
+	re := regexp.MustCompile(`\[(.*?)\]\s+(.*?)\s+-\s+IP:.*?\s+(Error\s+500\s+-\s+.*)?`)
 	matches := re.FindStringSubmatch(line)
-
-	//fmt.Println("Matches:", matches) // Debugging
 
 	if len(matches) < 3 {
 		return LogEntry{}, fmt.Errorf("invalid log format: %s", line)

@@ -17,10 +17,10 @@ func main() {
 	done := make(chan bool)
 	var wg sync.WaitGroup
 
-	wg.Add(3) // Add 3 goroutines to wait for
+	wg.Add(3)
 
 	go func() {
-		reader.ReadLogs(logChan) //Removed scanner from argument.
+		reader.ReadLogs(logChan)
 		wg.Done()
 	}()
 
@@ -34,7 +34,6 @@ func main() {
 		wg.Done()
 	}()
 
-	// Handle Ctrl+C
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -43,5 +42,5 @@ func main() {
 	}()
 
 	<-done
-	wg.Wait() // Wait for all goroutines to finish
+	wg.Wait()
 }

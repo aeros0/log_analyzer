@@ -9,7 +9,7 @@ import (
 )
 
 func ReadLogs(logChan chan<- logentry.LogEntry) {
-	//fmt.Println("Log reader started")
+	fmt.Println("Log reader started")
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -47,8 +47,7 @@ func ReadLogs(logChan chan<- logentry.LogEntry) {
 					continue
 				}
 				logChan <- entry
-				//fmt.Println("Parsed entry:", entry) // Debugging
-				lastOffset, _ = file.Seek(0, 1) // save current offset.
+				lastOffset, _ = file.Seek(0, 1)
 			}
 
 			if err := scanner.Err(); err != nil {
@@ -59,7 +58,7 @@ func ReadLogs(logChan chan<- logentry.LogEntry) {
 		}
 	}
 
-	//fmt.Println("Log channel closed")
-	//fmt.Println("Log reader finished")
+	fmt.Println("Log channel closed")
+	fmt.Println("Log reader finished")
 	close(logChan)
 }
