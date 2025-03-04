@@ -20,7 +20,7 @@ func main() {
 	wg.Add(3)
 
 	go func() {
-		reader.ReadLogs(logChan)
+		reader.ReadLogs(logChan, statsChan, done)
 		wg.Done()
 	}()
 

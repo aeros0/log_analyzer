@@ -2,10 +2,10 @@
 
 # Configuration variables
 LOG_FILE="test_logs.log"
-MIN_BURST=1
-MAX_BURST=1000
-MIN_SLEEP=1
-MAX_SLEEP=10
+MIN_LOGS_PER_SECOND=600  # Minimum log timestamps per log-time second
+MAX_LOGS_PER_SECOND=4900 # Maximum log timestamps per log-time second
+MIN_SLEEP=0.01          # Minimum system-time sleep (in seconds)
+MAX_SLEEP=0.3           # Maximum system-time sleep (in seconds)
 
 # Array of possible error messages
 declare -a ERROR_MESSAGES=(
@@ -50,13 +50,12 @@ generate_error_message() {
     fi
 }
 
-# Function to generate a single log entry
+# Function to generate a single log entry with a given timestamp
 generate_log_entry() {
     local level=$(generate_level)
     local ip=$(generate_ip)
-    local timestamp=$(get_timestamp)
     local error_message=$(generate_error_message "$level")
-    echo "[$timestamp] $level - IP:$ip $error_message"
+    echo "[$1] $level - IP:$ip $error_message" # Use provided timestamp
 }
 
 # Create or clear the log file
@@ -66,15 +65,18 @@ echo "Starting log generation. Press Ctrl+C to stop..."
 
 # Main loop to generate logs
 while true; do
-    # Generate a random burst size
-    burst_size=$((RANDOM % (MAX_BURST - MIN_BURST + 1) + MIN_BURST))
-    
-    # Generate burst of log entries
-    for ((i=0; i<burst_size; i++)); do
-        generate_log_entry >> "$LOG_FILE"
+    # Generate a random number of logs per log-time second
+    logs_per_second=$((RANDOM % (MAX_LOGS_PER_SECOND - MIN_LOGS_PER_SECOND + 1) + MIN_LOGS_PER_SECOND))
+
+    # Get the initial timestamp for the "log-time" second
+    initial_timestamp=$(get_timestamp)
+
+    # Generate log entries for the "log-time" second
+    for ((i=0; i<logs_per_second; i++)); do
+        generate_log_entry "$initial_timestamp" >> "$LOG_FILE"
     done
-    
-    # Random sleep between bursts (in milliseconds)
-    sleep_time=$((RANDOM % (MAX_SLEEP - MIN_SLEEP + 1) + MIN_SLEEP))
-    sleep "0.$sleep_time"
+
+    # Random sleep between "log-time" seconds (in system-time seconds)
+    sleep_time=$(echo "scale=2; $MIN_SLEEP + (rand() / ${RANDOM_MAX:-32767}) * ($MAX_SLEEP - $MIN_SLEEP)" | bc -l)
+    sleep "$sleep_time"
 done

@@ -2,91 +2,129 @@ package analyzer
 
 import (
 	"fmt"
-	"log-analyzer/internal/stats"
 	"log-analyzer/pkg/logentry"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
-var mutex sync.Mutex
+var patternCountsMutex sync.RWMutex
+var patternWeightsMutex sync.RWMutex
 
 func ProcessLogs(logChan <-chan logentry.LogEntry, statsChan chan<- map[string]interface{}) {
-	slidingWindow := make([]logentry.LogEntry, 0, 60)
+	var lastLogTime time.Time
+	var currentRate int
+	var peakRate int
+	var totalEntries int
+	var errorCount int
+	var errorCountperSec int
+	var infoCount int
+	var debugCount int
+	var isFirst bool = true
+	var errorCounts = make(map[string]int)
+	var slidingWindow []logentry.LogEntry
+	var adaptiveWindow int
 	patternCounts := make(map[string]int)
 	patternWeights := make(map[string]float64)
-	perSecondRates := make([]int, 60)
-	lastUpdateTime := time.Now()
-	var skippedLogs int32
-	bufferSize := 10000
-	var errorCount int32
-	var lastErrorRate float64
+	// Calculate error percentages
+	errorPercentages := make(map[string]float64)
 
-	for entry := range logChan {
-		if entry.Timestamp.IsZero() {
-			atomic.AddInt32(&skippedLogs, 1)
-			continue
-		}
-		slidingWindow = append(slidingWindow, entry)
-		if len(slidingWindow) > int(time.Since(slidingWindow[0].Timestamp).Seconds()) {
-			slidingWindow = slidingWindow[1:]
-		}
+	ticker := time.NewTicker(time.Second) // System-time ticker
+	defer ticker.Stop()
 
-		if entry.Level == "ERROR" && entry.Message != "" {
-			patternCounts[entry.Message]++
-			updateWeights(patternWeights, patternCounts, entry.Message)
-		}
-
-		now := time.Now()
-		if now.Second() != lastUpdateTime.Second() {
-			perSecondRates = append(perSecondRates[1:], 0)
-			lastUpdateTime = now
-		}
-		perSecondRates[len(perSecondRates)-1]++
-
-		adjustWindow(slidingWindow, perSecondRates)
-
-		if len(logChan) > bufferSize*9/10 {
-			bufferSize = bufferSize * 3 / 2
-			fmt.Printf("[%s] ⚠️ Burst detected: Resized buffer to %d\n", time.Now().UTC().Format("15:04:05"), bufferSize)
-		}
-
-		if entry.Level == "ERROR" {
-			atomic.AddInt32(&errorCount, 1)
-		}
-
-		// Generate and send stats on every entry
-		stats := stats.GenerateStats(slidingWindow, patternCounts, patternWeights, perSecondRates, int(atomic.LoadInt32(&skippedLogs)))
-		statsChan <- stats
-
-		timeDiff := time.Since(lastUpdateTime)
-		if timeDiff >= time.Second {
-			lastUpdateTime = time.Now()
-			errorRate := stats["errorRate"].(float64)
-			if errorRate > lastErrorRate*2 && lastErrorRate != 0 {
-				fmt.Printf("[%s] ⚠️ High error rate (%.1f errors/sec), increased pattern weight\n", time.Now().UTC().Format("15:04:05"), errorRate)
-				// Implement logic to increase pattern weights here
+	for {
+		select {
+		case entry := <-logChan:
+			totalEntries++
+			if isFirst {
+				lastLogTime = entry.Timestamp
+				isFirst = !isFirst
+				fmt.Print(lastLogTime)
 			}
-			lastErrorRate = errorRate
-		}
-	}
-	close(statsChan)
-}
+			slidingWindow = append(slidingWindow, entry)
+			if entry.Level == "ERROR" {
+				//patternCountsMutex.Lock()
+				patternCounts[entry.Message]++
+				//patternCountsMutex.Unlock()
+				//patternWeightsMutex.Lock()
+				updateWeights(patternWeights, patternCounts, entry.Message)
+				//patternWeightsMutex.Unlock()
+			}
 
-func adjustWindow(slidingWindow []logentry.LogEntry, perSecondRates []int) {
-	rate := stats.CalculateRate(perSecondRates)
-	if rate > 2500 && len(slidingWindow) > 30 {
-		slidingWindow = slidingWindow[len(slidingWindow)-30:]
-		fmt.Printf("[%s] ⚠️ Adjusted window to %d sec due to rate surge\n", time.Now().UTC().Format("15:04:05"), len(slidingWindow))
-	} else if rate < 600 && len(slidingWindow) < 120 {
-		// Implement logic to increase window size if needed
-		// slidingWindow = slidingWindow[len(slidingWindow)-120:]
+			if entry.Timestamp.Sub(lastLogTime) < time.Second {
+
+				for msg, count := range errorCounts {
+					errorPercentages[msg] = float64(count) / float64(totalEntries) * 100
+				}
+
+				//lastLogTime = entry.Timestamp
+
+				errorCounts = make(map[string]int)
+				slidingWindow = []logentry.LogEntry{}
+				// } else if lastLogTime.IsZero() {
+			} else {
+				if currentRate > peakRate {
+					peakRate = currentRate
+				}
+				lastLogTime = entry.Timestamp
+				fmt.Print(lastLogTime)
+				currentRate = 0
+				errorCountperSec = 0
+			}
+
+			currentRate++
+			if entry.Level == "ERROR" {
+				errorCounts[entry.Message]++
+				errorCount++
+				errorCountperSec++
+			}
+			if entry.Level == "INFO" {
+				infoCount++
+			}
+			if entry.Level == "DEBUG" {
+				debugCount++
+			}
+		case <-ticker.C: // System-time trigger
+			// Snapshot current statistics
+			if currentRate > peakRate {
+				peakRate = currentRate
+			}
+
+			// Calculate error percentages
+			// errorPercentages := make(map[string]float64)
+			// for msg, count := range errorCounts {
+			// 	errorPercentages[msg] = float64(count) / float64(totalEntries) * 100
+			// }
+
+			statsData := make(map[string]interface{})
+			// Generate and send stats
+			//statsData := stats.GenerateStats(slidingWindow, patternCounts, patternWeights, nil, 0) // perSecondRates are irrelevant now
+			statsData["currentRate"] = float64(currentRate)
+			statsData["peakRate"] = float64(peakRate)
+			statsData["totalEntries"] = float64(totalEntries)
+			statsData["errorPercentages"] = errorPercentages
+			statsData["entriesProcessed"] = int(totalEntries)
+			statsData["windowSize"] = float64(adaptiveWindow)
+			statsData["errorPercentage"] = float64(errorCount) / float64(totalEntries) * 100
+			statsData["infoPercentage"] = float64(infoCount) / float64(totalEntries) * 100
+			statsData["debugPercentage"] = float64(debugCount) / float64(totalEntries) * 100
+			statsData["errorCount"] = errorCount
+			statsData["infoCount"] = infoCount
+			statsData["debugCount"] = debugCount
+			statsData["errorRate"] = float64(errorCountperSec) / float64(currentRate) * 100
+			//statsData["skippedLogs"] = skippedLogs
+			statsData["patternCounts"] = patternCounts
+			statsData["patternWeights"] = patternWeights
+
+			//patternWeightsMutex.Lock()
+			statsChan <- statsData
+			//patternWeightsMutex.Unlock()
+		}
 	}
 }
 
 func updateWeights(patternWeights map[string]float64, patternCounts map[string]int, message string) {
-	mutex.Lock()
-	defer mutex.Unlock()
+	patternWeightsMutex.Lock()
+	defer patternWeightsMutex.Unlock()
 
 	if _, ok := patternWeights[message]; !ok {
 		patternWeights[message] = 1.0
@@ -97,4 +135,17 @@ func updateWeights(patternWeights map[string]float64, patternCounts map[string]i
 	if rateOfChange >= 4.0 {
 		patternWeights[message] *= 3.0
 	}
+}
+
+func calculateRateOfChange(patternCounts map[string]int, message string, window time.Duration) float64 {
+	patternCountsMutex.RLock()
+	defer patternCountsMutex.RUnlock()
+
+	countNow := patternCounts[message]
+	countBefore := 0 // Implement logic to get count from 'window' time ago
+	if countBefore == 0 {
+		return 0.0
+	}
+
+	return float64(countNow) / float64(countBefore)
 }

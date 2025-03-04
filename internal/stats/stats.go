@@ -26,7 +26,16 @@ func GenerateStats(slidingWindow []logentry.LogEntry, patternCounts map[string]i
 
 	currentRate := CalculateRate(perSecondRates)
 	peakRate := CalculatePeakRate(perSecondRates)
-	errorRate := float64(errorCount) / float64(len(perSecondRates))
+
+	// Declare errorRate here
+	var errorRate float64
+
+	if len(perSecondRates) > 0 {
+		errorRate := float64(errorCount) / float64(len(perSecondRates))
+		stats["errorRate"] = errorRate
+	} else {
+		stats["errorRate"] = 0.0
+	}
 
 	stats["entriesProcessed"] = total + skippedLogs
 	stats["currentRate"] = currentRate

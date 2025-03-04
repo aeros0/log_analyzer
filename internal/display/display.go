@@ -3,13 +3,14 @@ package display
 import (
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 )
 
-func DisplayStats(statsChan <-chan map[string]interface{}, done chan bool) {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+var patternCountsMutex sync.RWMutex
+var patternWeightsMutex sync.RWMutex
 
+func DisplayStats(statsChan <-chan map[string]interface{}, done chan bool) {
 	for {
 		select {
 		case stats, ok := <-statsChan:
@@ -18,13 +19,13 @@ func DisplayStats(statsChan <-chan map[string]interface{}, done chan bool) {
 			}
 			clearScreen()
 			displayReport(stats)
-		case <-ticker.C:
-			// No action on ticker, display report only when stats are received
 		case <-done:
 			return
 		}
 	}
 }
+
+// ...
 
 func clearScreen() {
 	fmt.Print("\033[H\033[2J")
@@ -52,7 +53,28 @@ func displayReport(stats map[string]interface{}) {
 
 	// Top Errors (Placeholder)
 	fmt.Println("• Top Errors:")
-	topErrors := getTopErrors(stats["patternCounts"].(map[string]int), stats["patternWeights"].(map[string]float64), 3)
+	patternCountsCopy := make(map[string]int)
+	patternWeightsCopy := make(map[string]float64)
+
+	patternCountsMutex.RLock()
+	originalPatternCounts, ok := stats["patternCounts"].(map[string]int)
+	if ok {
+		for k, v := range originalPatternCounts {
+			patternCountsCopy[k] = v
+		}
+	}
+	patternCountsMutex.RUnlock()
+
+	patternWeightsMutex.RLock()
+	originalPatternWeights, ok := stats["patternWeights"].(map[string]float64)
+	if ok {
+		for k, v := range originalPatternWeights {
+			patternWeightsCopy[k] = v
+		}
+	}
+	patternWeightsMutex.RUnlock()
+
+	topErrors := getTopErrors(patternCountsCopy, patternWeightsCopy, 3)
 	for i, errorMsg := range topErrors {
 		fmt.Printf("  %d. %s\n", i+1, errorMsg)
 	}
@@ -72,13 +94,19 @@ func getTopErrors(patternCounts map[string]int, patternWeights map[string]float6
 	}
 
 	var errors []errorEntry
+	patternCountsMutex.RLock()  // Read lock
+	patternWeightsMutex.RLock() // Read lock
 	for msg, count := range patternCounts {
 		errors = append(errors, errorEntry{Message: msg, Weight: float64(count) * patternWeights[msg]})
 	}
+	patternWeightsMutex.RUnlock() // Read unlock
+	patternCountsMutex.RUnlock()
 
+	patternWeightsMutex.RLock()
 	sort.Slice(errors, func(i, j int) bool {
 		return errors[i].Weight > errors[j].Weight
 	})
+	patternWeightsMutex.RUnlock()
 
 	var topErrors []string
 	for i := 0; i < len(errors) && i < limit; i++ {
